@@ -5,29 +5,40 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// PostgreSQL connection pool
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 20,                    // Maksimum ulanishlar soni
-  idleTimeoutMillis: 30000,   // Bo'sh ulanish vaqti
-  connectionTimeoutMillis: 5000
-});
+// Database mavjudligini tekshirish
+const isDatabaseConfigured = !!process.env.DATABASE_URL;
 
-// Ulanishni test qilish
-pool.on('connect', () => {
-  console.log('✅ PostgreSQL ga ulandi');
-});
+// PostgreSQL connection pool (faqat DATABASE_URL mavjud bo'lsa)
+let pool = null;
 
-pool.on('error', (err) => {
-  console.error('❌ PostgreSQL xatosi:', err.message);
-});
+if (isDatabaseConfigured) {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000
+  });
+
+  pool.on('connect', () => {
+    console.log('✅ PostgreSQL ga ulandi');
+  });
+
+  pool.on('error', (err) => {
+    console.error('❌ PostgreSQL xatosi:', err.message);
+  });
+} else {
+  console.warn('⚠️ DATABASE_URL topilmadi. Database funksiyalari ishlamaydi.');
+}
 
 /**
  * SQL so'rov bajarish
- * @param {string} text - SQL query
- * @param {Array} params - Query parameters
  */
 async function query(text, params) {
+  if (!pool) {
+    throw new Error('Database ulanmagan. DATABASE_URL environment variable ni sozlang.');
+  }
+  
   const start = Date.now();
   const result = await pool.query(text, params);
   const duration = Date.now() - start;
@@ -41,9 +52,12 @@ async function query(text, params) {
 
 /**
  * Transaction bilan ishlash
- * @param {Function} callback - Transaction ichidagi operatsiyalar
  */
 async function transaction(callback) {
+  if (!pool) {
+    throw new Error('Database ulanmagan.');
+  }
+  
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -61,5 +75,6 @@ async function transaction(callback) {
 module.exports = {
   pool,
   query,
-  transaction
+  transaction,
+  isDatabaseConfigured
 };

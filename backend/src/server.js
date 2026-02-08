@@ -6,13 +6,10 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 
-// Routes
-const completedDealsRoutes = require('./routes/completedDeals');
-const ingestionRoutes = require('./routes/ingestion');
-
-// Scheduler
-const { startScheduler } = require('./scheduler');
+// Database (optional)
+const { isDatabaseConfigured } = require('./db/db');
 
 // Express app
 const app = express();
@@ -25,13 +22,16 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Request logging (development)
-if (process.env.NODE_ENV === 'development') {
-  app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
-    next();
-  });
-}
+// Request logging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
+  next();
+});
+
+// ==============================================
+// STATIC FILES (Frontend)
+// ==============================================
+app.use(express.static(path.join(__dirname, '../../RIsKMONITOR')));
 
 // ==============================================
 // ROUTES
@@ -43,21 +43,41 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    database: isDatabaseConfigured ? 'configured' : 'not configured',
     env: process.env.NODE_ENV || 'development'
   });
 });
 
-// API routes
-app.use('/api/completed-deals', completedDealsRoutes);
-app.use('/api/ingestion', ingestionRoutes);
+// API routes (faqat database mavjud bo'lsa)
+if (isDatabaseConfigured) {
+  const completedDealsRoutes = require('./routes/completedDeals');
+  const ingestionRoutes = require('./routes/ingestion');
+  const { startScheduler } = require('./scheduler');
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint topilmadi',
-    path: req.path
+  app.use('/api/completed-deals', completedDealsRoutes);
+  app.use('/api/ingestion', ingestionRoutes);
+
+  // Start scheduler
+  if (process.env.SCHEDULE_CRON !== 'disabled') {
+    startScheduler();
+  }
+} else {
+  // Database yo'q bo'lsa mock javob
+  app.get('/api/*', (req, res) => {
+    res.status(503).json({
+      success: false,
+      error: 'Database ulanmagan. DATABASE_URL environment variable ni sozlang.'
+    });
   });
+}
+
+// Frontend SPA routing (hash-based emas bo'lsa)
+app.get('*', (req, res) => {
+  // API so'rovlarini o'tkazib yuborish
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ success: false, error: 'Endpoint topilmadi' });
+  }
+  res.sendFile(path.join(__dirname, '../../RIsKMONITOR/index.html'));
 });
 
 // Error handler
@@ -77,29 +97,20 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3001;
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔══════════════════════════════════════════════════╗
-║  🚀 RiskMonitor Backend Server                   ║
+║  🚀 RiskMonitor Server                           ║
 ╠══════════════════════════════════════════════════╣
-║  Port: ${PORT}                                       ║
-║  Environment: ${(process.env.NODE_ENV || 'development').padEnd(32)}║
+║  Port: ${String(PORT).padEnd(41)}║
+║  Database: ${isDatabaseConfigured ? '✅ Configured'.padEnd(37) : '❌ Not configured'.padEnd(37)}║
 ╚══════════════════════════════════════════════════╝
 
-📡 API Endpoints:
+📡 Endpoints:
    GET  /health                     - Server holati
    GET  /api/completed-deals        - Deals ro'yxati
-   GET  /api/completed-deals/:id    - Deal tafsilotlari
-   GET  /api/completed-deals/stats  - Statistika
-   GET  /api/ingestion/runs         - Ingestion tarixi
-   GET  /api/ingestion/last         - Oxirgi run
-   POST /api/ingestion/run          - Qo'lda sync (admin)
+   GET  /                           - Frontend
 `);
-
-  // Scheduler ni ishga tushirish
-  if (process.env.SCHEDULE_CRON !== 'disabled') {
-    startScheduler();
-  }
 });
 
 module.exports = app;
