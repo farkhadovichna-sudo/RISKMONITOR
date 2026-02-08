@@ -2,24 +2,17 @@
   "name": "riskmonitor",
   "version": "1.0.0",
   "description": "RiskMonitor - Davlat Xaridlari Risk-Skoring Platformasi",
-  "main": "backend/src/server.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node backend/src/server.js",
-    "dev": "cd backend && npm run dev",
-    "migrate": "node backend/src/db/migrate.js",
-    "ingest": "node backend/src/scripts/runIngestion.js",
-    "postinstall": "cd backend && npm install"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "backend": "node backend/src/server.js"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "axios": "^1.6.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "node-cron": "^3.0.3",
-    "pg": "^8.11.3",
-    "uuid": "^9.0.1"
+    "express": "^4.18.2"
   }
 }
