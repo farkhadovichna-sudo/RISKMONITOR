@@ -50,9 +50,15 @@ app.get('/health', (req, res) => {
 
 // API routes (faqat database mavjud bo'lsa)
 if (isDatabaseConfigured) {
+  const { runMigrations } = require('./db/migrate');
   const completedDealsRoutes = require('./routes/completedDeals');
   const ingestionRoutes = require('./routes/ingestion');
   const { startScheduler } = require('./scheduler');
+
+  // Avtomatik migration (table lar mavjud bo'lmasa yaratadi)
+  runMigrations()
+    .then(() => console.log('✅ Database tables ready'))
+    .catch(err => console.error('❌ Migration error:', err.message));
 
   app.use('/api/completed-deals', completedDealsRoutes);
   app.use('/api/ingestion', ingestionRoutes);
